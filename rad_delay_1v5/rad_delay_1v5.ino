@@ -6,11 +6,38 @@
  * Glitchy delay using a teesny 3.2 and simple parts
  * https://github.com/BleepLabs/Rad-Fi-Delay-1.5
  * 
+ * Adapted by Adrien Fauconnet
+ * 
  */
 
 #include <ADC.h>
 ADC *adc = new ADC(); // adc object. THe adc library allows for faster analog reading
 #define audio_in_pin  A2 // there are two independent ADCs in the teensy 3.2. one will be used for the audio in, the other for the pots
+
+// pots pins
+#define OSC1_POT A4
+#define OSC2_POT A5
+#define OSC3_POT A6
+#define FB_POT A1
+#define TIME_POT A0
+
+// oscillator output pins
+#define OSC1 0
+#define OSC2 1
+#define OSC3 2
+#define RATE 13
+
+// mode selection input pins
+#define BYPASS 22
+#define WET 23
+#define COMBINE 6
+#define FREEZE 7
+#define INT1 8
+#define INT2 9
+#define DIV1 10
+#define DIV2 11
+#define DIV3 12
+
 
 IntervalTimer timer1, timer2;
 
@@ -63,24 +90,23 @@ byte play_mode;
 float led_max_bright = .5; //0.0 to 1.0
 
 void setup() {
-  pinMode(2, INPUT_PULLUP);
-  pinMode(3, INPUT_PULLUP);
-  pinMode(4, INPUT_PULLUP);
-  pinMode(5, INPUT_PULLUP);
-  pinMode(6, INPUT_PULLUP);
-  pinMode(7, INPUT_PULLUP);
-  pinMode(8, INPUT_PULLUP);
+  pinMode(BYPASS, INPUT_PULLUP);
+  pinMode(WET, INPUT_PULLUP);
 
-  pinMode(9, INPUT_PULLUP);
-  pinMode(10, INPUT_PULLUP);
-  pinMode(11, INPUT_PULLUP);
-  pinMode(12, INPUT_PULLUP);
+  pinMode(COMBINE, INPUT_PULLUP);
+  pinMode(FREEZE, INPUT_PULLUP);
 
-  pinMode(13, OUTPUT);
+  pinMode(INT1, INPUT_PULLUP);
+  pinMode(INT2, INPUT_PULLUP);
 
-  pinMode(23, OUTPUT);
-  pinMode(22, OUTPUT);
-  pinMode(21, OUTPUT);
+  pinMode(DIV1, INPUT_PULLUP);
+  pinMode(DIV2, INPUT_PULLUP);
+  pinMode(DIV3, INPUT_PULLUP);
+
+  pinMode(RATE, OUTPUT);
+  pinMode(OSC1, OUTPUT);
+  pinMode(OSC2, OUTPUT);
+  pinMode(OSC3, OUTPUT);
 
   pinMode(audio_in_pin, INPUT);
 
@@ -119,26 +145,26 @@ void loop() {
       then divided by it's top valuse, 4096 aka >>12.
       It's divide again to get it to the final range we want. Dividing is fine here since were not after speed
     */
-    raw_pot[0] = analogRead(A6);
+    raw_pot[0] = analogRead(OSC1_POT);
     uint32_t logtemp = pow(raw_pot[0], 2);
     rate[0] = (logtemp >> 12) / 200.00;
 
-    raw_pot[1] = analogRead(A5);
+    raw_pot[1] = analogRead(OSC2_POT);
     logtemp = pow(raw_pot[1], 2);
     rate[1] = (logtemp >> 12) / 200.00;
 
-    raw_pot[2] = analogRead(A4);
+    raw_pot[2] = analogRead(OSC3_POT);
     logtemp = pow(raw_pot[2], 2);
     rate[2] = (logtemp >> 12) / 400.00;
 
-    fb_amt = (analogRead(A1) >> 4);
+    fb_amt = (analogRead(FB_POT) >> 4);
 
     /*
         If the delay time were to move around exactly with the potentiometer it would be noisey
         instead we do a linear interpolation and chase the value around.
         Having it do this more slowly creates the calssic tape delay effect
     */
-    target_dly_time = analogRead(A0) * (max_delay_len / 4095.00);
+    target_dly_time = analogRead(TIME_POT) * (max_delay_len / 4095.00);
 
   }
   //linear interpolation for dealy time
@@ -187,16 +213,16 @@ void dly1() {
   osc_tick++;
   if (osc_tick == 1) {
     squ[1] = vsqu(1, rate[0] * 3, 2000);
-    digitalWriteFast(23, squ[1]);
+    digitalWriteFast(OSC1, squ[1]);
   }
   if (osc_tick == 2) {
     squ[2] = vsqu(2, rate[1] * 3, 2000);
-    digitalWriteFast(22, squ[2]);
+    digitalWriteFast(OSC2, squ[2]);
   }
   if (osc_tick >= 3) {
     osc_tick = 0;
     squ[3] = vsqu(3, rate[2] * 3, 2000);
-    digitalWriteFast(21, squ[3]);
+    digitalWriteFast(OSC3, squ[3]);
   }
   /*
     ! means the opposite so 1 instead of 0
@@ -204,16 +230,16 @@ void dly1() {
     It will return a 0 when a low signal is coming in.
   */
 
-  digital_in[0] = !digitalRead(2);
-  digital_in[1] = !digitalRead(3);
-  digital_in[2] = !digitalRead(4);
+  digital_in[0] = !digitalRead(DIV1);
+  digital_in[1] = !digitalRead(DIV2);
+  digital_in[2] = !digitalRead(DIV3);
 
 
-  freeze = !digitalRead(8);
-  passthrough = digitalRead(12);
-  dig_comb = digitalRead(9);
-  interval_sel = ((!digitalRead(5)) << 1) + !digitalRead(6) ;
-  wet = digitalRead(11);
+  freeze = !digitalRead(FREEZE);
+  passthrough = digitalRead(BYPASS);
+  dig_comb = digitalRead(COMBINE);
+  interval_sel = ((!digitalRead(INT1)) << 1) + !digitalRead(INT2) ;
+  wet = digitalRead(WET);
 
   if (freeze == 0) {  // freeze mode off
     /*
@@ -239,10 +265,10 @@ void dly1() {
     }
 
     if (delay_led_cnt < 20) {
-      digitalWrite(13, 1);
+      digitalWrite(RATE, 1);
     }
     else {
-      digitalWrite(13, 0);
+      digitalWrite(RATE, 0);
     }
 
     if (write_loc > max_delay_len) {
